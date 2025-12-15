@@ -72,6 +72,70 @@ class DatabaseClient:
         except Exception:
             return False
     
+    async def execute(self, query: str, *args) -> str:
+        """Execute a query and return the status.
+        
+        Args:
+            query: SQL query to execute
+            *args: Query parameters
+        
+        Returns:
+            Status string from the query execution
+        """
+        if self._pool is None:
+            raise RuntimeError("Database client not connected. Call connect() first.")
+        
+        async with self._pool.acquire() as conn:
+            return await conn.execute(query, *args)
+    
+    async def fetch(self, query: str, *args) -> list:
+        """Fetch all rows from a query.
+        
+        Args:
+            query: SQL query to execute
+            *args: Query parameters
+        
+        Returns:
+            List of row records
+        """
+        if self._pool is None:
+            raise RuntimeError("Database client not connected. Call connect() first.")
+        
+        async with self._pool.acquire() as conn:
+            return await conn.fetch(query, *args)
+    
+    async def fetchrow(self, query: str, *args):
+        """Fetch a single row from a query.
+        
+        Args:
+            query: SQL query to execute
+            *args: Query parameters
+        
+        Returns:
+            Row record or None
+        """
+        if self._pool is None:
+            raise RuntimeError("Database client not connected. Call connect() first.")
+        
+        async with self._pool.acquire() as conn:
+            return await conn.fetchrow(query, *args)
+    
+    async def fetchval(self, query: str, *args):
+        """Fetch a single value from a query.
+        
+        Args:
+            query: SQL query to execute
+            *args: Query parameters
+        
+        Returns:
+            Single value or None
+        """
+        if self._pool is None:
+            raise RuntimeError("Database client not connected. Call connect() first.")
+        
+        async with self._pool.acquire() as conn:
+            return await conn.fetchval(query, *args)
+    
     async def __aenter__(self) -> "DatabaseClient":
         """Async context manager entry."""
         await self.connect()

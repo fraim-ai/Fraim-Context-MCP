@@ -156,6 +156,22 @@ class CacheClient:
         except Exception:
             return False
     
+    async def invalidate_project(self, project_id: str) -> bool:
+        """Invalidate all cache entries for a project.
+        
+        Args:
+            project_id: Project ID to invalidate cache for
+        
+        Returns:
+            True if successful
+        """
+        return await self.delete(f"fraim:{project_id}:*")
+    
+    # Aliases for compatibility
+    async def close(self) -> None:
+        """Alias for disconnect."""
+        await self.disconnect()
+    
     async def __aenter__(self) -> "CacheClient":
         """Async context manager entry."""
         await self.connect()
@@ -164,4 +180,8 @@ class CacheClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit."""
         await self.disconnect()
+
+
+# Alias for compatibility
+RedisClient = CacheClient
 
