@@ -1,0 +1,33 @@
+{
+  "description": "Tracks all changes made from the original DNA template files",
+  "categories": {
+    "schema": "Database schema changes",
+    "config": "Configuration file updates",
+    "dependencies": "Package additions/removals/updates",
+    "architecture": "Structural changes from original design",
+    "api": "Endpoint or contract changes",
+    "tests": "Test structure modifications",
+    "scripts": "Build/setup script changes",
+    "docs": "Documentation updates"
+  },
+  "changelog": [
+    {
+      "date": "2025-12-15",
+      "category": "docs",
+      "type": "added",
+      "file": "DNA/CHANGELOG.json",
+      "description": "Created changelog to track deviations from original DNA template",
+      "reason": "Maintain traceability between original design and implementation"
+    },
+    {
+      "date": "2025-12-15",
+      "category": "config",
+      "type": "changed",
+      "file": ".cursorrules",
+      "description": "Added Critical Constraint #9 for DNA changelog tracking and updated Common Mistakes section",
+      "reason": "Ensure Cursor AI always updates changelog when deviating from DNA templates"
+    }
+  ],
+  "pending_reviews": []
+}
+

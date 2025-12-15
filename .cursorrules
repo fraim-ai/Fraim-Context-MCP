@@ -1,0 +1,389 @@
+# Fraim Context MCP — Cursor Rules
+
+> Read MANIFEST.md first for project navigation.
+> Read DEVELOPMENT_PLAN.md for current stage and tasks.
+
+## Identity
+
+You are building **Fraim Context MCP v5.1**, a semantic search MCP server for project documentation.
+
+**Doppler Project**: `fraim-context`  
+**Python Version**: 3.12+  
+**Package Manager**: `uv`
+**LLM Access**: Pydantic AI Gateway (single key for all providers)
+
+---
+
+## 🛠️ Slash Commands
+
+Use these commands to execute common tasks:
+
+| Command | Description |
+|---------|-------------|
+| `/test-all` | Run the entire test suite (all stages) |
+| `/test-unit` | Run only unit tests (fast checks for core logic) |
+| `/test-integration` | Run integration tests (ensures components work together) |
+| `/sync-deps` | Install or update project dependencies |
+| `/launch-server` | Start the application server (FastAPI with Uvicorn) |
+| `/launch-ui` | Start Streamlit UI for testing |
+| `/verify-env` | Verify environment setup (Python, packages, env vars) |
+| `/init-db` | Initialize the database (run migrations/setup) |
+| `/ingest-data` | Trigger data ingestion (populate pgvector indexes) |
+
+### Command Implementations
+
+```bash
+# /test-all
+doppler run -- uv run pytest tests/ -v
+
+# /test-unit
+doppler run -- uv run pytest tests/stage_0/ tests/stage_1/ -v --ignore=tests/stage_5/
+
+# /test-integration
+doppler run -- uv run pytest tests/stage_5/ -v
+
+# /sync-deps
+uv sync
+
+# /launch-server
+doppler run -- uv run uvicorn fraim_mcp.server.http_server:app --reload
+
+# /launch-ui
+doppler run -- uv run streamlit run src/fraim_mcp/ui/app.py
+
+# /verify-env
+doppler run -- uv run python scripts/verify_env.py
+
+# /init-db
+doppler run -- psql $DATABASE_URL -f scripts/init_db.sql
+
+# /ingest-data
+doppler run -- uv run python -m fraim_mcp.ingestion.cli
+```
+
+---
+
+## 🚨 Critical Constraints (MEMORIZE THESE)
+
+### 1. Secrets Management (Doppler → Gateway)
+
+```
+❌ NEVER create .env files
+❌ NEVER hardcode secrets or API keys
+❌ NEVER commit secrets to git
+❌ NEVER assume secrets are correct without testing
+✅ ALWAYS read secrets from os.environ (populated by Doppler)
+✅ ALWAYS run commands with: doppler run -- <command>
+✅ ALWAYS test secret validity in Stage 0
+```
+
+**Doppler → Pydantic AI Gateway Flow:**
+```
+1. Doppler stores: PYDANTIC_AI_GATEWAY_API_KEY
+2. Application reads key at startup
+3. Pydantic AI uses gateway/* model strings
+4. Gateway routes to appropriate provider
+```
+
+### 2. Pydantic AI Gateway (LLM Access)
+
+```python
+# ✅ CORRECT - Use Gateway for unified access
+from pydantic_ai import Agent
+
+agent = Agent('gateway/openai:gpt-4o')        # OpenAI via Gateway
+agent = Agent('gateway/anthropic:claude-sonnet-4-5')  # Anthropic via Gateway
+
+# ❌ WRONG - Direct provider access (bypasses cost tracking)
+agent = Agent('openai:gpt-4o')  # No Gateway
+```
+
+**Required Environment Variable:**
+```bash
+PYDANTIC_AI_GATEWAY_API_KEY=paig_xxxxx
+```
+
+### 3. Test-Driven Development
+
+```
+❌ NEVER write implementation before tests
+❌ NEVER skip stages in DEVELOPMENT_PLAN.md
+❌ NEVER modify specs/ files (they are READ-ONLY)
+✅ ALWAYS write tests FIRST in tests/stage_N/
+✅ ALWAYS run tests before marking a task complete
+✅ ALWAYS update DEVELOPMENT_PLAN.md checkboxes when tests pass
+```
+
+### 4. Database (asyncpg + pgvector)
+
+```python
+# ❌ WRONG - vectors return as strings without codec registration
+async with pool.acquire() as conn:
+    result = await conn.fetch(query)  # Vectors are broken!
+
+# ✅ CORRECT - register pgvector codec on EVERY connection
+from pgvector.asyncpg import register_vector
+
+async def init_connection(conn):
+    await register_vector(conn)  # CRITICAL!
+
+pool = await asyncpg.create_pool(dsn=url, init=init_connection)
+```
+
+**Hard Contract**: Vector dimension is **1024** (voyage-3). Schema will reject other dimensions.
+
+### 5. Redis 7.x (Native Async)
+
+```python
+# ❌ WRONG - Redis 5.x pattern (deprecated)
+import redis
+r = redis.Redis()
+
+# ✅ CORRECT - Redis 7.x native asyncio
+import redis.asyncio as redis
+r = await redis.from_url(url)
+await r.set("key", "value")
+```
+
+### 6. Async Safety (DSPy)
+
+```python
+# ❌ WRONG - DSPy is synchronous, this blocks the event loop
+result = dspy_module.forward(query=q)
+
+# ✅ CORRECT - run in thread pool
+result = await asyncio.to_thread(dspy_module.forward, query=q)
+```
+
+### 7. MCP Transport (stdout sensitivity)
+
+```python
+# ❌ WRONG - print() corrupts MCP JSON-RPC
+print("Debug message")
+
+# ✅ CORRECT - redirect stdout, use logfire or stderr
+import sys
+sys.stdout = sys.stderr  # Do this FIRST in mcp_server.py
+
+import logfire
+logfire.info("Debug message")  # Safe
+```
+
+### 8. SSE Streaming (Thread Safety)
+
+```python
+# sse-starlette 3.0.3 is REQUIRED for thread-safe streaming
+# Older versions have race conditions in multi-user mode
+from sse_starlette.sse import EventSourceResponse
+```
+
+### 9. DNA Changelog (Track All Deviations)
+
+```
+✅ ALWAYS update DNA/CHANGELOG.json when modifying files that deviate from DNA templates
+✅ ALWAYS include: date, category, type, file, description, and reason
+✅ ALWAYS check DNA/ folder for original template before making structural changes
+❌ NEVER make significant changes without logging them in the changelog
+```
+
+**Changelog Entry Format:**
+```json
+{
+  "date": "YYYY-MM-DD",
+  "category": "schema|config|dependencies|architecture|api|tests|scripts|docs",
+  "type": "added|changed|removed",
+  "file": "path/to/affected/file",
+  "description": "What changed",
+  "reason": "Why it changed"
+}
+```
+
+**When to Log:**
+- Adding new files not in original DNA template
+- Modifying structure from DNA specs
+- Changing dependencies from DNA/pyproject.toml
+- Updating scripts differently from DNA/scripts/
+- Any architectural deviation from DNA/specs/
+
+---
+
+## 📁 Protected Files (READ-ONLY)
+
+**DO NOT MODIFY** these files:
+
+```
+specs/ARCHITECTURE.md
+specs/CONTRACTS.md
+specs/DEPENDENCIES.md
+specs/MCP_STATUS.md
+```
+
+If you find an issue with a spec, document it in `docs/SPEC_ISSUES.md` instead.
+
+---
+
+## 🧪 TDD Workflow
+
+```
+1. Check DEVELOPMENT_PLAN.md for current stage
+2. Read the stage requirements
+3. Write test file in tests/stage_N/
+4. Run test (should FAIL): doppler run -- uv run pytest tests/stage_N/test_file.py -v
+5. Implement code in src/fraim_mcp/
+6. Run test (should PASS): doppler run -- uv run pytest tests/stage_N/test_file.py -v
+7. Update DEVELOPMENT_PLAN.md checkbox
+8. Repeat until stage complete
+9. Run ALL stage tests: doppler run -- uv run pytest tests/stage_N/ -v
+10. Move to next stage
+```
+
+---
+
+## 📝 Code Style
+
+### Imports
+
+```python
+# Standard library
+import asyncio
+import os
+from typing import Any
+
+# Third-party
+import asyncpg
+import logfire
+from pydantic import BaseModel
+
+# Local
+from fraim_mcp.config import settings
+from fraim_mcp.database.models import ChunkResult
+```
+
+### Type Hints
+
+```python
+# ✅ Always use type hints
+async def search(query: str, top_k: int = 5) -> list[ChunkResult]:
+    ...
+
+# ✅ Use | for unions (Python 3.10+)
+def get_value() -> str | None:
+    ...
+```
+
+### Docstrings
+
+```python
+def hybrid_search(
+    project_id: str,
+    embedding: list[float],
+    fts_query: str,
+) -> list[ChunkResult]:
+    """
+    Execute hybrid vector + full-text search.
+    
+    Args:
+        project_id: Tenant ID (REQUIRED for isolation)
+        embedding: Query embedding vector (1024 dims)
+        fts_query: Full-text search query string
+    
+    Returns:
+        List of ChunkResult sorted by combined score
+    
+    Raises:
+        ValueError: If embedding dimension != 1024
+    """
+```
+
+### Error Handling
+
+```python
+# ✅ Specific exceptions with logging
+from asyncpg.exceptions import PostgresError
+
+try:
+    result = await db.hybrid_search(...)
+except PostgresError as e:
+    logfire.error("Database error", error=str(e), project_id=project_id)
+    raise
+```
+
+---
+
+## 🔧 Commands
+
+```bash
+# Setup
+doppler login
+doppler setup
+uv sync
+
+# Testing
+doppler run -- uv run pytest tests/stage_N/ -v          # Run stage tests
+doppler run -- uv run pytest tests/ -v                   # Run all tests
+doppler run -- uv run pytest tests/ --cov=fraim_mcp     # With coverage
+
+# Linting
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
+uv run mypy src/fraim_mcp
+
+# Running
+doppler run -- uv run uvicorn fraim_mcp.server.http_server:app --reload
+doppler run -- uv run python -m fraim_mcp.server.mcp_server
+```
+
+---
+
+## 📚 Reference Documentation
+
+Always check these before implementing:
+
+| Component | Documentation |
+|-----------|---------------|
+| Pydantic | https://docs.pydantic.dev/latest/ |
+| Pydantic AI | https://ai.pydantic.dev/ |
+| Logfire | https://logfire.pydantic.dev/docs/ |
+| FastAPI | https://fastapi.tiangolo.com/ |
+| asyncpg | https://magicstack.github.io/asyncpg/current/ |
+| pgvector | https://github.com/pgvector/pgvector-python |
+| LiteLLM | https://docs.litellm.ai/ |
+| DSPy | https://dspy.ai/ |
+| LlamaIndex | https://docs.llamaindex.ai/ |
+| MCP Spec | https://spec.modelcontextprotocol.io/ |
+| FlashRank | https://github.com/PrithivirajDamodaran/FlashRank |
+| Doppler | https://docs.doppler.com/ |
+
+---
+
+## ⚠️ Common Mistakes to Avoid
+
+1. **Creating .env files** → Use Doppler instead
+2. **Skipping test stages** → They build on each other
+3. **Not registering pgvector codec** → Vectors become strings
+4. **Calling DSPy directly in async** → Blocks event loop
+5. **Using print() in MCP server** → Corrupts JSON-RPC
+6. **Assuming secrets work** → Test them in Stage 0
+7. **Modifying spec files** → They are read-only
+8. **Wrong embedding dimensions** → Must be 1024
+9. **Forgetting to update DNA/CHANGELOG.json** → Log all deviations from DNA templates
+
+---
+
+## 🔄 Git Workflow
+
+```bash
+# Commit message format
+type(scope): description
+
+# Types: feat, fix, test, docs, refactor, chore
+# Examples:
+feat(database): add hybrid search with FTS
+fix(embeddings): register pgvector codec on init
+test(stage_1): add database connection tests
+docs(manifest): update progress tracker
+```
+
+---
+
+**START HERE**: Read `MANIFEST.md`, then `DEVELOPMENT_PLAN.md`, then begin Stage 0.

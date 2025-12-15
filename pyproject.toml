@@ -1,0 +1,162 @@
+# =============================================================================
+# FRAIM CONTEXT MCP v5.1 — Project Configuration
+# =============================================================================
+# AUDITED: December 2025 — All versions verified against PyPI
+# See specs/DEPENDENCIES.md for upgrade rationale
+# =============================================================================
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fraim-context-mcp"
+version = "5.1.0"
+description = "Semantic search MCP server for project documentation"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.14"
+authors = [{ name = "Fraim Team" }]
+keywords = ["mcp", "semantic-search", "rag", "llm", "documentation"]
+
+dependencies = [
+    # ==========================================================================
+    # PYDANTIC ECOSYSTEM — Core Foundation (VERIFIED CURRENT)
+    # Pydantic AI Gateway: Use PYDANTIC_AI_GATEWAY_API_KEY for unified access
+    # ==========================================================================
+    "pydantic==2.12.5",           # Latest stable (2.13.0 not yet released)
+    "pydantic-settings==2.12.0",  # CURRENT
+    "pydantic-ai==1.32.0",        # CURRENT (includes Gateway support)
+    
+    # ==========================================================================
+    # OBSERVABILITY — Logfire + OpenTelemetry (VERIFIED CURRENT)
+    # ==========================================================================
+    "logfire[fastapi,asyncpg,redis,httpx]==4.16.0",  # CURRENT
+    "opentelemetry-sdk==1.39.1",                      # UPGRADE: Matches Logfire
+    "opentelemetry-exporter-otlp==1.39.1",            # UPGRADE: Consistent telemetry
+    
+    # ==========================================================================
+    # WEB FRAMEWORK — CRITICAL UPGRADES for async stability
+    # ==========================================================================
+    "fastapi==0.124.0",           # UPGRADE: Schema fixes, security patches
+    "uvicorn[standard]==0.38.0",  # UPGRADE: Improved graceful shutdown
+    "sse-starlette==3.0.3",       # CRITICAL: Thread-safety for streaming
+    "httpx==0.28.1",              # CURRENT
+    
+    # ==========================================================================
+    # DATABASE — PostgreSQL + pgvector (VERIFIED CURRENT)
+    # ==========================================================================
+    "asyncpg==0.31.0",            # CURRENT (PostgreSQL 17/18 support)
+    "pgvector==0.4.2",            # CURRENT
+    
+    # ==========================================================================
+    # CACHE — CRITICAL UPGRADE for native asyncio
+    # ==========================================================================
+    "redis==7.1.0",               # CRITICAL: Native asyncio, Redis 7.2 features
+    
+    # ==========================================================================
+    # LLM & AI — Using Pydantic AI Gateway (not LiteLLM direct)
+    # Gateway handles: routing, cost tracking, rate limits, failover
+    # ==========================================================================
+    "litellm==1.80.10",           # UPGRADE: MCP Hub, Agent Gateway, Guardrails v2
+    "dspy-ai==3.0.4",             # CURRENT
+    "flashrank==0.2.10",          # UPGRADE: Performance optimizations
+    
+    # ==========================================================================
+    # INGESTION — LlamaIndex (UPGRADED for API compatibility)
+    # ==========================================================================
+    "llama-index-core==0.14.10",       # UPGRADE: Multi-modal, VectorStore refactor
+    "llama-index-readers-file==0.5.5", # UPGRADE: Compatibility with core
+    
+    # ==========================================================================
+    # MCP — CRITICAL UPGRADE to November 2025 Protocol Standard
+    # ==========================================================================
+    "mcp==1.24.0",                # CRITICAL: Protocol compliance, Progress API
+    
+    # ==========================================================================
+    # UTILITIES — Hygiene upgrades
+    # ==========================================================================
+    "python-dotenv==1.2.1",       # UPGRADE: For local dev fallback only
+    "click==8.3.1",               # UPGRADE: Shell completion improvements
+    "rich>=13.0.0,<14",            # Compatible with streamlit
+    "tenacity==9.1.2",            # UPGRADE: Typing fixes
+    
+    # ==========================================================================
+    # UI TESTING — Streamlit for rapid prototyping
+    # ==========================================================================
+    "streamlit==1.41.1",          # UI testing interfaces
+    "watchdog==6.0.0",            # File watching for Streamlit hot reload
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
+    "pytest-timeout==2.3.1",
+    "testcontainers[postgres,redis]==4.9.0",
+    "mypy==1.13.0",
+    "ruff==0.8.4",
+    "types-redis==4.6.0.20241004",
+]
+
+[project.scripts]
+fraim-mcp = "fraim_mcp.cli:main"
+
+[project.urls]
+Repository = "https://github.com/your-org/fraim-context-mcp"
+
+# =============================================================================
+# TOOL CONFIGURATION
+# =============================================================================
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fraim_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "stage0: Environment validation tests",
+    "stage1: Database layer tests",
+    "stage2: LLM and embedding tests",
+    "stage3: Retrieval pipeline tests",
+    "stage4: MCP server tests",
+    "stage5: Integration tests",
+]
+
+[tool.coverage.run]
+source = ["src/fraim_mcp"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fraim_mcp"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["litellm.*", "dspy.*", "flashrank.*", "llama_index.*", "mcp.*", "logfire.*"]
+ignore_missing_imports = true

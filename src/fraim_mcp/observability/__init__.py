@@ -1,0 +1,2 @@
+"""Observability - Logfire integration."""
+
